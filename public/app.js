@@ -204,19 +204,21 @@ function loadGsi() {
 
 function renderLogin(error = null) {
   document.title = 'Sign in · Planning Poker';
-  const { googleClientId, devLogin, allowedDomain } = S.config;
+  const { googleClientId, devLogin } = S.config;
+  const domains = S.config.allowedDomains || String(S.config.allowedDomain || '').split(',').map((d) => d.trim()).filter(Boolean);
+  const domainText = domains.length > 1 ? `${domains.slice(0, -1).join(', ')} or ${domains[domains.length - 1]}` : domains[0] || '';
   app.innerHTML = `
     <main class="login">
       <div class="login-card">
         <div class="fan" aria-hidden="true"><span>3</span><span>5</span><span class="back"></span></div>
         <h1>Planning Poker</h1>
-        <p>Estimate stories together with your team. Sign in with your ${esc(allowedDomain)} Google account.</p>
+        <p>Estimate stories together with your team. Sign in with your ${esc(domainText)} Google account.</p>
         <div class="login-alert" id="login-error" role="alert" ${error ? '' : 'hidden'}>${esc(error || '')}</div>
         <div class="gsi-slot" id="gsi-button">${googleClientId ? '' : '<p class="error-text">Google sign-in is not configured on this server yet.</p>'}</div>
         ${devLogin ? `
           <form class="dev-login" id="dev-login">
-            <p class="hint">Local testing only: sign in with any ${esc(allowedDomain)} email.</p>
-            <input class="input" name="email" type="email" placeholder="name@${esc(allowedDomain)}" required>
+            <p class="hint">Local testing only: sign in with any ${esc(domainText)} email.</p>
+            <input class="input" name="email" type="email" placeholder="name@${esc(domains[0] || '')}" required>
             <input class="input" name="name" placeholder="Display name">
             <button class="btn" type="submit">Sign in for testing</button>
           </form>` : ''}
@@ -238,7 +240,8 @@ function renderLogin(error = null) {
     loadGsi().then(() => {
       window.google.accounts.id.initialize({
         client_id: googleClientId,
-        hd: allowedDomain,
+        // "hd" can only hint one domain, so it is sent only when there is exactly one.
+        ...(domains.length === 1 ? { hd: domains[0] } : {}),
         ux_mode: 'popup',
         callback: async ({ credential }) => {
           try {

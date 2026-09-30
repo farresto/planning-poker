@@ -11,8 +11,16 @@ export class AuthError extends Error {
   }
 }
 
-export function isAllowedEmail(email, domain) {
-  return typeof email === 'string' && email.toLowerCase().endsWith('@' + domain.toLowerCase());
+// Accepts one domain, a comma-separated list ("gmail.com,globant.com") or an array.
+export function parseDomains(domains) {
+  const list = Array.isArray(domains) ? domains : String(domains ?? '').split(',');
+  return list.map((d) => String(d).trim().toLowerCase().replace(/^@/, '')).filter(Boolean);
+}
+
+export function isAllowedEmail(email, domains) {
+  if (typeof email !== 'string') return false;
+  const address = email.toLowerCase();
+  return parseDomains(domains).some((d) => address.endsWith('@' + d));
 }
 
 // ---------- Google ID token verification (RS256 via Google's JWKS) ----------

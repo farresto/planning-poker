@@ -192,6 +192,13 @@ test('session codec and domain check', () => {
   assert.equal(isAllowedEmail('x@GLOBANT.COM', 'globant.com'), true);
   assert.equal(isAllowedEmail('x@notglobant.com', 'globant.com'), false);
   assert.equal(isAllowedEmail('x@globant.com.evil.io', 'globant.com'), false);
+  // several domains, comma-separated or as an array
+  assert.equal(isAllowedEmail('x@gmail.com', 'gmail.com, globant.com'), true);
+  assert.equal(isAllowedEmail('x@globant.com', 'gmail.com,globant.com'), true);
+  assert.equal(isAllowedEmail('x@GMAIL.com', ['gmail.com', 'globant.com']), true);
+  assert.equal(isAllowedEmail('x@hotmail.com', 'gmail.com,globant.com'), false);
+  assert.equal(isAllowedEmail('x@evilgmail.com', 'gmail.com,globant.com'), false);
+  assert.equal(isAllowedEmail('x@gmail.com', ''), false);
 });
 
 // ---------- HTTP end-to-end ----------

@@ -10,7 +10,7 @@ services:
       - key: NODE_VERSION
         value: "22"
       - key: ALLOWED_DOMAIN
-        value: gmail.com
+        value: "gmail.com,globant.com"
       - key: SESSION_SECRET
         generateValue: true
       - key: GOOGLE_CLIENT_ID

@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { RoomManager, ActionError } from './rooms.js';
 import {
-  AuthError, DOMAIN_ERROR, createSessionCodec, isAllowedEmail, parseCookies, verifyGoogleIdToken,
+  AuthError, DOMAIN_ERROR, createSessionCodec, isAllowedEmail, parseCookies, parseDomains, verifyGoogleIdToken,
 } from './auth.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -40,7 +40,7 @@ class HttpError extends Error {
 export function createApp(options = {}) {
   const config = {
     googleClientId: options.googleClientId ?? process.env.GOOGLE_CLIENT_ID ?? '',
-    allowedDomain: (options.allowedDomain ?? process.env.ALLOWED_DOMAIN ?? 'globant.com').toLowerCase(),
+    allowedDomains: parseDomains(options.allowedDomain ?? process.env.ALLOWED_DOMAIN ?? 'globant.com'),
     allowDevLogin: options.allowDevLogin ?? process.env.ALLOW_DEV_LOGIN === 'true',
     sessionSecret: options.sessionSecret ?? process.env.SESSION_SECRET ?? crypto.randomBytes(32).toString('hex'),
     verifyToken: options.verifyToken ?? verifyGoogleIdToken,
@@ -124,7 +124,7 @@ export function createApp(options = {}) {
   function requireUser(req) {
     const user = currentUser(req);
     if (!user) throw new HttpError(401, 'Sign in to continue.');
-    if (!isAllowedEmail(user.email, config.allowedDomain)) throw new HttpError(403, DOMAIN_ERROR);
+    if (!isAllowedEmail(user.email, config.allowedDomains)) throw new HttpError(403, DOMAIN_ERROR);
     return user;
   }
 
@@ -216,7 +216,8 @@ export function createApp(options = {}) {
     if (pathname === '/api/config' && method === 'GET') {
       return json(res, 200, {
         googleClientId: config.googleClientId,
-        allowedDomain: config.allowedDomain,
+        allowedDomain: config.allowedDomains.join(', '),
+        allowedDomains: config.allowedDomains,
         devLogin: config.allowDevLogin,
       });
     }
@@ -225,7 +226,7 @@ export function createApp(options = {}) {
       if (!config.googleClientId) throw new HttpError(500, 'Google sign-in is not configured on the server.');
       const { credential } = await readJson(req);
       const payload = await config.verifyToken(credential, { clientId: config.googleClientId });
-      if (!isAllowedEmail(payload.email, config.allowedDomain)) throw new HttpError(403, DOMAIN_ERROR);
+      if (!isAllowedEmail(payload.email, config.allowedDomains)) throw new HttpError(403, DOMAIN_ERROR);
       const user = { email: payload.email.toLowerCase(), name: payload.name || payload.email.split('@')[0], picture: payload.picture || null };
       setSession(req, res, user);
       return json(res, 200, { user });
@@ -236,7 +237,7 @@ export function createApp(options = {}) {
       const body = await readJson(req);
       const email = String(body.email || '').trim().toLowerCase();
       if (!/^[^@\s]+@[^@\s]+$/.test(email)) throw new HttpError(400, 'Enter an email address.');
-      if (!isAllowedEmail(email, config.allowedDomain)) throw new HttpError(403, DOMAIN_ERROR);
+      if (!isAllowedEmail(email, config.allowedDomains)) throw new HttpError(403, DOMAIN_ERROR);
       const user = { email, name: String(body.name || email.split('@')[0]).slice(0, 32), picture: null };
       setSession(req, res, user);
       return json(res, 200, { user });
