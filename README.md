@@ -1,6 +1,6 @@
 # Planning Poker
 
-Real-time Planning Poker for sprint planning. Sign in with a Google account from the allowed domain (`globant.com` by default), create a room, share the invite link, and vote on story points together.
+Real-time Planning Poker for sprint planning. Sign in with a Google account from the allowed domain (`gmail.com` by default), create a room, share the invite link, and vote on story points together.
 
 The app has **no runtime dependencies**: a plain Node.js server (`node:http`) pushes live updates to browsers with Server-Sent Events, and verifies Google sign-in tokens with Node's built-in crypto. There is no database. Rooms, votes and profiles live in memory and disappear when a room empties or the server restarts, as the spec requires.
 
@@ -13,7 +13,7 @@ npm run dev          # http://localhost:3000 with a test-only email sign-in enab
 npm test             # 15 tests: room logic, auth, HTTP + live-update flow
 ```
 
-`npm run dev` sets `ALLOW_DEV_LOGIN=true`, which shows a "Sign in for testing" form that takes any `@globant.com` email without Google. Use several browser profiles or private windows to simulate a team. **Never set `ALLOW_DEV_LOGIN` in production.**
+`npm run dev` sets `ALLOW_DEV_LOGIN=true`, which shows a "Sign in for testing" form that takes any `@gmail.com` email without Google. Use several browser profiles or private windows to simulate a team. **Never set `ALLOW_DEV_LOGIN` in production.**
 
 To test real Google sign-in locally, create the OAuth client below, add `http://localhost:3000` as an authorized JavaScript origin, and run:
 
@@ -36,7 +36,7 @@ git push -u origin main
 ### 2. Create the Google OAuth client
 
 1. Open [Google Cloud Console](https://console.cloud.google.com/) → create or pick a project.
-2. **APIs & Services → OAuth consent screen**: configure it (app name, support email). Choose **Internal** if the project belongs to the Globant Workspace organization; otherwise **External**.
+2. **APIs & Services → OAuth consent screen**: configure it (app name, support email). Choose **Internal** if the project belongs to the Workspace organization; otherwise **External**.
 3. **APIs & Services → Credentials → Create credentials → OAuth client ID** → type **Web application**.
 4. Under **Authorized JavaScript origins** add your site URL (e.g. `https://planning-poker-xxxx.onrender.com`) and `http://localhost:3000`. No redirect URIs are needed.
 5. Copy the **Client ID**.
@@ -57,7 +57,7 @@ Any host that runs a long-lived Node process works (Railway, Fly.io, Koyeb, a VM
 | --- | --- | --- |
 | `GOOGLE_CLIENT_ID` | yes | OAuth Web client ID used to verify Google sign-in tokens |
 | `SESSION_SECRET` | recommended | Signs session cookies; if missing, a random one is used and everyone is signed out on restart |
-| `ALLOWED_DOMAIN` | no | Email domain allowed in (default `globant.com`) |
+| `ALLOWED_DOMAIN` | no | Email domain allowed in (default `gmail.com`) |
 | `PORT` | no | Set automatically by most hosts (default 3000) |
 | `ALLOW_DEV_LOGIN` | no | `true` enables email-only sign-in for local testing. Keep unset in production |
 
@@ -72,7 +72,7 @@ public/            Single-page app (vanilla JS modules, no build step)
 test/              node:test suite
 ```
 
-- **Sign-in**: Google Identity Services returns an ID token; the server checks its signature, audience, expiry, verified email and the `@globant.com` suffix. Other domains get "Domain not allowed to use this site." The session is a signed, HTTP-only cookie (12 h); no user data is stored on the server.
+- **Sign-in**: Google Identity Services returns an ID token; the server checks its signature, audience, expiry, verified email and the `@gmail.com` suffix. Other domains get "Domain not allowed to use this site." The session is a signed, HTTP-only cookie (12 h); no user data is stored on the server.
 - **Live updates**: each player keeps one event stream open; actions (vote, reveal, settings…) are plain POST requests. Every player receives a personalised view in which other people's cards stay hidden until the reveal, so votes can't be peeked at in dev tools.
 - **Profile**: display name and picture choice are kept in the browser's local storage only and sent to a room when you join. Uploaded pictures are cropped and shrunk to 160 px in the browser before upload and kept in memory only while you're in the room.
 
