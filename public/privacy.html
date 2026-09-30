@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Privacy Policy · Planning Poker</title>
+  <meta name="description" content="How Planning Poker handles your data.">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,400..800&family=Instrument+Sans:wght@400..700&display=swap">
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    .policy { max-width: 720px; margin: 0 auto; padding: 40px 16px 64px; }
+    .policy h1 { font-size: clamp(1.8rem, 5vw, 2.4rem); margin-bottom: 6px; }
+    .policy h2 { font-size: 1.2rem; margin-top: 32px; margin-bottom: 8px; }
+    .policy p, .policy li { color: var(--ink); }
+    .policy .updated { color: var(--muted); margin-top: 0; }
+    .policy ul { padding-left: 22px; }
+    .policy a { color: var(--felt-light); }
+    .policy .back { display: inline-block; margin-bottom: 24px; }
+  </style>
+</head>
+<body>
+  <main class="policy">
+    <a class="back" href="/">← Back to Planning Poker</a>
+    <h1>Privacy Policy</h1>
+    <p class="updated">Last updated: 30 September 2026</p>
+
+    <p>Planning Poker is a small internal tool that lets a team estimate story points together during sprint planning. It is designed to keep as little data as possible, for as short a time as possible.</p>
+
+    <h2>What we receive when you sign in</h2>
+    <p>You sign in with Google. Google sends the app a signed token containing your <strong>name, email address and profile picture URL</strong>. The app checks the token and that your email belongs to the allowed domain, then uses these details only to show who is in a room.</p>
+    <p>The app asks Google only for basic profile information (<code>openid</code>, <code>email</code>, <code>profile</code>). It never sees your Google password and has no access to your Gmail, Drive, contacts or any other Google data.</p>
+
+    <h2>What is stored, and where</h2>
+    <ul>
+      <li><strong>No database.</strong> Nothing about you is written to disk on the server.</li>
+      <li><strong>Session cookie:</strong> after sign-in your browser keeps a signed, HTTP-only cookie with your name, email and picture URL so you stay signed in. It expires after 12 hours, or when you sign out.</li>
+      <li><strong>Rooms and votes</strong> live only in the server's memory while the room is open. They disappear when everyone leaves the room or the server restarts.</li>
+      <li><strong>Profile choices</strong> (display name and picture choice) are saved in your own browser's local storage, not on the server. A picture you upload is shrunk in your browser and kept in server memory only while you are in a room.</li>
+    </ul>
+
+    <h2>Sharing</h2>
+    <p>Your name, picture and votes are shown to the other people in the same room. Nothing is sold, shared with advertisers or used for tracking. The app uses no analytics or advertising cookies.</p>
+
+    <h2>Third-party services</h2>
+    <ul>
+      <li><strong>Google Identity Services</strong> handles sign-in (<a href="https://policies.google.com/privacy" rel="noopener">Google Privacy Policy</a>).</li>
+      <li><strong>Google Fonts</strong> serves the fonts used on the page.</li>
+      <li><strong>Render</strong> hosts the app and may keep standard server logs such as IP addresses and request times (<a href="https://render.com/privacy" rel="noopener">Render Privacy Policy</a>).</li>
+    </ul>
+
+    <h2>Your choices</h2>
+    <p>You can sign out at any time, which removes the session cookie. Clearing your browser's site data removes your saved profile choices. You can also revoke the app's access from your <a href="https://myaccount.google.com/connections" rel="noopener">Google Account connections</a>.</p>
+
+    <h2>Contact</h2>
+    <p>Questions about this policy: <a href="mailto:farresto@gmail.com">farresto@gmail.com</a>.</p>
+  </main>
+</body>
+</html>
