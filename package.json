@@ -1,0 +1,13 @@
+{
+  "name": "planning-poker",
+  "version": "1.0.0",
+  "description": "Real-time Planning Poker for sprint planning, with Google sign-in restricted to one domain.",
+  "type": "module",
+  "private": true,
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "ALLOW_DEV_LOGIN=true node --watch server/index.js",
+    "test": "node --test test/*.test.js"
+  }
+}
