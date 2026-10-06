@@ -4,6 +4,12 @@ Real-time Planning Poker for sprint planning. Sign in with a Google or Microsoft
 
 The app has **no runtime dependencies**: a plain Node.js server (`node:http`) pushes live updates to browsers with Server-Sent Events, and verifies Google and Microsoft sign-in tokens with Node's built-in crypto. There is no database. Rooms, votes and profiles live in memory and disappear when a room empties or the server restarts, as the spec requires.
 
+![Create a Room](https://github.com/farresto/planning-poker/blob/e643f5e4594bef3621de2308b33e8df49028800a/create-or-join-room.png)
+![Room of 6](https://github.com/farresto/planning-poker/blob/e643f5e4594bef3621de2308b33e8df49028800a/1-room-6-players.png)
+![Room of 24](https://github.com/farresto/planning-poker/blob/e643f5e4594bef3621de2308b33e8df49028800a/5b-room-24-players-revealed.png)
+
+
+
 ## Run locally
 
 Requires Node.js 20 or newer.
