@@ -1,6 +1,6 @@
 # Planning Poker
 
-Real-time Planning Poker for sprint planning. Sign in with a Google or Microsoft account (any email domain by default), create a room, share the invite link, and vote on story points together.
+Real-time Planning Poker for sprint planning. Sign in with a Google or Microsoft account (any email domain by default), create a room, share the invite link, and vote on story points together or join as spectator. Features the usual card types to choose from and allows for a custom set to be created. There's also optional Skip and Coffee Cards.
 
 The app has **no runtime dependencies**: a plain Node.js server (`node:http`) pushes live updates to browsers with Server-Sent Events, and verifies Google and Microsoft sign-in tokens with Node's built-in crypto. There is no database. Rooms, votes and profiles live in memory and disappear when a room empties or the server restarts, as the spec requires.
 
@@ -92,20 +92,3 @@ test/              node:test suite
 - **Allowed domains**: any by default (`ALLOWED_DOMAIN=*`). With a list, other domains get "Domain not allowed to use this site." The session is a signed, HTTP-only cookie (12 h); no user data is stored on the server.
 - **Live updates**: each player keeps one event stream open; actions (vote, reveal, settings…) are plain POST requests. Every player receives a personalised view in which other people's cards stay hidden until the reveal, so votes can't be peeked at in dev tools.
 - **Profile**: display name and picture choice are kept in the browser's local storage only and sent to a room when you join. Uploaded pictures are cropped and shrunk to 160 px in the browser before upload and kept in memory only while you're in the room.
-
-## Behaviour details and choices
-
-These points were not fully specified, so here is what the app does:
-
-- **One room at a time**: joining a second room removes you from the first (that tab shows a notice). Opening the same room in a second tab takes over from the first tab.
-- **Reloading or dropping connection**: you keep your seat and vote for 45 seconds, shown as "(away)". Away players who haven't voted don't block "everyone has voted".
-- **Creator leaves**: the next longest-present player becomes the creator, so the room never gets stuck without someone who can reveal or change settings.
-- **Kick**: kicked players cannot rejoin that room.
-- **Reveal button**: appears for the creator once everyone voted, or as soon as one vote is in if "Allow reveal before voting finishes" is on. Players who hadn't voted can't vote that round.
-- **Timer**: counts down for every round. At zero the cards are revealed automatically.
-- **Coffee card** counts as 0 in the average and median. **SKIP** is shown in the tally but excluded from both, and from full agreement.
-- **Median** also works on non-numeric decks (T-shirt, custom text) by card order. **Average** only shows on numeric decks.
-- **Full agreement**: at least two votes, all on the same card (not SKIP). Confetti also fires if agreement is reached by someone editing their card after the reveal.
-- **Changing the deck** (or the SKIP/coffee cards) from settings starts a new round, since existing votes may no longer be valid cards. Other settings apply instantly without resetting.
-- **Vote again** is available to everyone, as the spec doesn't restrict it.
-- **Emoji reactions** are rate-limited to 6 per 3 seconds per person.
