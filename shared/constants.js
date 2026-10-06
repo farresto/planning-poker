@@ -46,6 +46,9 @@ export const SETTING_LABELS = {
 export const REACTIONS = ['👍', '👏', '🎉', '😂', '🤔', '😱', '🔥', '❤️', '☕', '🚀', '🙈', '💯'];
 export const THROWABLES = ['🍅', '🎯', '💖', '🧻', '🥚', '✈️', '🌸', '🏀'];
 
+export const MAX_PLAYERS = 24; // everyone in a room, spectators included
+export const TABLE_MAX_PLAYERS = 12; // above this the room shows two player lists instead of the table
+export const ROOM_FULL_ERROR = 'Room is full. It already has the maximum of 24 people.';
 export const MAX_CUSTOM_CARDS = 20;
 export const MAX_CARD_LENGTH = 10;
 export const TIMER_MIN = 10;

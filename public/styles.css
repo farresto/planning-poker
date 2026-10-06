@@ -60,7 +60,7 @@ img { max-width: 100%; }
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: .45em;
   min-height: 40px; padding: 0 16px; border-radius: 999px; border: 1.5px solid var(--line);
-  background: var(--surface); color: var(--ink); font-weight: 600; cursor: pointer; white-space: nowrap;
+  background: var(--surface); color: var(--ink); font-weight: 600; cursor: pointer; white-space: nowrap; text-decoration: none;
   transition: background-color .15s, border-color .15s, transform .1s;
 }
 .btn:hover { border-color: var(--ink); }
@@ -229,6 +229,27 @@ img { max-width: 100%; }
 .throw-menu button { width: 36px; height: 36px; border: 0; background: none; border-radius: 50%; font-size: 1.3rem; cursor: pointer; }
 .throw-menu button:hover, .throw-menu button:focus-visible { background: var(--surface-2); transform: scale(1.15); }
 
+/* ---------- player lists (more than 12 people) ---------- */
+.roster { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 28px; width: min(1180px, 100%); align-items: start; padding: 4px 0; }
+.roster-list { display: grid; gap: 3px; align-content: start; }
+.roster-table { display: grid; place-items: center; align-self: center; }
+.roster .table { position: relative; left: auto; top: auto; transform: none; width: 340px; min-height: 200px; padding: 24px 36px; }
+.seat.seat-row {
+  position: static; transform: none; width: auto; flex-direction: row; align-items: center; gap: 10px;
+  height: 38px; padding: 0 12px 0 5px; background: var(--surface); border: 1px solid var(--line); border-radius: 999px;
+}
+.seat-row .seat-avatar { order: 1; }
+.seat-row .seat-avatar .avatar { width: 30px; height: 30px; font-size: .8rem; box-shadow: none; }
+.seat-row.is-you .seat-avatar .avatar { box-shadow: 0 0 0 2px var(--lime); }
+.seat-row .seat-name { order: 2; flex: 1; max-width: none; text-align: left; font-size: .9rem; }
+.seat-row .slot { order: 3; flex: none; width: 23px; height: 30px; border-radius: 5px; font-size: .85rem; border-width: 1.5px; }
+.seat-row .slot.small-text, .seat-row .slot-none { font-size: .55rem; }
+.seat-row .slot-spectator svg { width: 15px; height: 15px; }
+.seat-row .edit-vote { top: -7px; right: -11px; width: 20px; height: 20px; border-width: 1.5px; }
+.seat-row .edit-vote svg { width: 10px; height: 10px; }
+.roster-right .seat-row { flex-direction: row-reverse; padding: 0 5px 0 12px; }
+.roster-right .seat-row .seat-name { text-align: right; }
+
 /* ---------- hand of cards ---------- */
 .hand { display: grid; justify-items: center; gap: 2px; }
 .hand-label { color: var(--muted); font-weight: 600; text-align: center; margin: 0; }
@@ -291,6 +312,9 @@ img { max-width: 100%; }
 @media (max-width: 860px) {
   .home-grid { grid-template-columns: 1fr; }
   .room { padding-bottom: 90px; }
+  .roster { grid-template-columns: 1fr; gap: 12px; }
+  .roster-table { order: -1; }
+  .roster .table { width: 100%; min-height: 0; padding: 18px; border-radius: 22px; }
   .panel-join { position: static; order: -1; }
   .topbar { flex-wrap: wrap; }
   .room-actions { order: 3; width: 100%; justify-content: flex-start; overflow-x: auto; flex-wrap: nowrap; padding-bottom: 2px; }

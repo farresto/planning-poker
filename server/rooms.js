@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import {
   DEFAULT_SETTINGS, DECKS, SKIP_CARD, COFFEE_CARD, REACTIONS, THROWABLES,
-  TIMER_MIN, TIMER_MAX, COUNTDOWN_MS, buildDeck, cardNumber, parseCustomValues,
+  TIMER_MIN, TIMER_MAX, COUNTDOWN_MS, MAX_PLAYERS, ROOM_FULL_ERROR, buildDeck, cardNumber, parseCustomValues,
 } from '../shared/constants.js';
 
 const BOOL_KEYS = ['skipCard', 'coffeeCard', 'autoReveal', 'allowEarlyReveal', 'timer',
@@ -158,6 +158,7 @@ export class RoomManager {
   join(roomId, user, { spectator = false, profile = {} } = {}) {
     const room = this.requireRoom(roomId);
     if (room.banned.has(user.email)) throw new ActionError('You were removed from this room by its creator.');
+    if (!room.players.has(user.email) && room.players.size >= MAX_PLAYERS) throw new ActionError(ROOM_FULL_ERROR);
     const previous = this.userRoom.get(user.email);
     if (previous && previous !== roomId) this.leave(previous, user.email, 'joined-other-room');
 

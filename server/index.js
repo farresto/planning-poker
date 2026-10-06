@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { RoomManager, ActionError } from './rooms.js';
+import { MAX_PLAYERS } from '../shared/constants.js';
 import {
   AuthError, DOMAIN_ERROR, MICROSOFT_AUTHORIZE_URL, allowsAnyDomain, createSessionCodec, isAllowedEmail, parseCookies,
   parseDomains, verifyGoogleIdToken, verifyMicrosoftIdToken,
@@ -388,6 +389,7 @@ export function createApp(options = {}) {
         players: room.players.size,
         member: room.players.has(user.email),
         banned: room.banned.has(user.email),
+        full: !room.players.has(user.email) && room.players.size >= MAX_PLAYERS,
       });
     }
 
