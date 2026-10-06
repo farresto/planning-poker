@@ -1,6 +1,6 @@
 import {
   DECKS, DEFAULT_SETTINGS, SETTING_LABELS, REACTIONS, THROWABLES, SKIP_CARD, COFFEE_CARD,
-  TIMER_MIN, TIMER_MAX, buildDeck, parseCustomValues,
+  TIMER_MIN, TIMER_MAX, MAX_PLAYERS, TABLE_MAX_PLAYERS, buildDeck, parseCustomValues,
 } from '/shared/constants.js';
 import { PRESET_AVATARS, presetSvg, isPreset } from '/avatars.js';
 import { confetti, floatEmoji, throwEmoji } from '/effects.js';
@@ -156,6 +156,7 @@ async function route() {
     const info = await api(`/api/rooms/${roomId}`);
     if (info.member) return enterRoom(roomId);
     if (info.banned) return renderMessage('You can’t rejoin this room', 'The room creator removed you from this room.');
+    if (info.full) return renderRoomFull();
     renderJoin(info);
   } catch (err) {
     if (err.status === 401 || err.status === 403) return signedOut(err.status === 403 ? DOMAIN_ERROR : null);
@@ -434,28 +435,29 @@ function resizeImage(file) {
 }
 
 // ---------------- settings form (create + edit) ----------------
-function settingsFormHtml(s, { roomName = '', includeSpectator = false } = {}) {
+function settingsFormHtml(s, { roomName = '' } = {}) {
   const deckOptions = Object.entries(DECKS).map(([k, d]) => {
     const values = d.values ? ` (${d.values.join(', ')})` : '';
     return `<option value="${k}" ${s.deckType === k ? 'selected' : ''}>${esc(d.label + values)}</option>`;
   }).join('');
   const check = (key) => `<label class="check"><input type="checkbox" name="${key}" ${s[key] ? 'checked' : ''}><span>${esc(SETTING_LABELS[key])}</span></label>`;
   return `
-    <label class="field"><span>Room name</span>
-      <input class="input" name="roomName" maxlength="60" required placeholder="Sprint 42 planning" value="${esc(roomName)}"></label>
-    <label class="field"><span>Deck</span><select class="select" name="deckType">${deckOptions}</select></label>
+    <div class="form-row">
+      <label class="field"><span>Room name</span>
+        <input class="input" name="roomName" maxlength="60" required placeholder="Sprint 42 planning" value="${esc(roomName)}"></label>
+      <label class="field"><span>Deck</span><select class="select" name="deckType">${deckOptions}</select></label>
+    </div>
     <label class="field" data-custom ${s.deckType === 'custom' ? '' : 'hidden'}><span>Custom card values</span>
-      <textarea class="textarea" name="customValues" placeholder="1, 2, 3, 5, 8, ?">${esc(s.customValues)}</textarea>
+      <textarea class="textarea" name="customValues" rows="2" placeholder="1, 2, 3, 5, 8, ?">${esc(s.customValues)}</textarea>
       <span class="hint">Separate values with commas. Up to 20 cards, 10 characters each.</span></label>
     <div class="deck-preview" data-preview aria-label="Cards in this deck"></div>
     <p class="error-text" data-form-error hidden></p>
     <div class="options">
       ${check('skipCard')}${check('coffeeCard')}${check('autoReveal')}${check('allowEarlyReveal')}
-      <div>${check('timer')}<label class="inline-number" data-timer ${s.timer ? '' : 'hidden'}>
-        <input class="input" type="number" name="timerSeconds" min="${TIMER_MIN}" max="${TIMER_MAX}" value="${s.timerSeconds}"> <span>seconds per vote</span></label></div>
+      <div class="timer-opt">${check('timer')}<label class="inline-number" data-timer ${s.timer ? '' : 'hidden'}>
+        <input class="input" type="number" name="timerSeconds" min="${TIMER_MIN}" max="${TIMER_MAX}" value="${s.timerSeconds}" aria-label="Seconds per vote"> <span>sec</span></label></div>
       ${check('showAverage')}${check('showMedian')}${check('countdown')}${check('emojis')}${check('throwing')}
-    </div>
-    ${includeSpectator ? '<label class="check"><input type="checkbox" name="spectator"><span>Join as spectator</span></label>' : ''}`;
+    </div>`;
 }
 
 function readSettingsForm(form) {
@@ -516,9 +518,9 @@ function renderHome() {
       </section>
       <div class="home-grid">
         <form class="panel panel-create" id="create-form" novalidate>
-          <h2>Create a room</h2>
-          ${settingsFormHtml(DEFAULT_SETTINGS, { includeSpectator: true })}
-          <div class="form-foot"><span class="hint">You can change these options later from the room.</span>
+          <div class="panel-head"><h2>Create a room</h2><span class="hint">You can change these options later from the room.</span></div>
+          ${settingsFormHtml(DEFAULT_SETTINGS)}
+          <div class="form-foot"><label class="check"><input type="checkbox" name="spectator"><span>Join as spectator</span></label>
             <button class="btn btn-primary btn-lg" type="submit">Create room</button></div>
         </form>
         <form class="panel panel-join" id="join-form" novalidate>
@@ -573,6 +575,7 @@ async function joinRoom(roomId, spectator, onError) {
     history.pushState({}, '', `/room/${roomId}`);
     enterRoom(roomId);
   } catch (err) {
+    if (/^Room is full/.test(err.message || '')) return renderRoomFull();
     onError(err.status === 404 ? 'That room doesn’t exist. Check the link or code.' : err.message);
   }
 }
@@ -597,6 +600,10 @@ function renderJoin(info) {
     e.preventDefault();
     joinRoom(info.id, new FormData(form).get('spectator') === 'on', (msg) => showFormError(form, msg));
   });
+}
+
+function renderRoomFull() {
+  renderMessage('Room is full', `This room already has ${MAX_PLAYERS} people, the maximum. Ask the room creator to make space, or create a new room.`);
 }
 
 function renderMessage(title, text) {
@@ -716,6 +723,11 @@ function renderRoomShell() {
             <div id="seats"></div>
           </div>
         </div>
+        <div class="roster" id="roster" hidden>
+          <div class="roster-list roster-left" id="roster-left" aria-label="Players"></div>
+          <div class="roster-table" id="roster-table"></div>
+          <div class="roster-list roster-right" id="roster-right" aria-label="More players"></div>
+        </div>
       </section>
       <section class="hand" id="hand" aria-label="Your cards"></section>
       <section class="results" id="results" aria-live="polite"></section>
@@ -773,6 +785,7 @@ function onState(view) {
   renderTableStatus();
   renderHand();
   renderResults();
+  fitTable(); // hand and results are rendered now, so the height left for the table is known
   $('#reactions').hidden = !view.settings.emojis;
   if (!view.settings.throwing) hideThrowMenu(true);
   if ($('.modal-backdrop[data-modal="kick"]')) refreshKickModal();
@@ -826,40 +839,85 @@ async function onRoomAction(e) {
 const SEAT_W = 104;
 const SEAT_H = 124;
 
+const SEAT_GAP_X = 116; // centre-to-centre distance of seats in a row
+
 function layoutFor(n) {
-  // The table grows with the number of players so seats never crowd each other.
   const compact = ($('#stage')?.clientWidth || 1000) < 620;
+  if (n > 8) {
+    // 9–12 people: "stadium" seating. One seat at each end of the table and the rest in two rows
+    // along the top and bottom edges, so neighbours never stack on top of each other at the ends.
+    const top = Math.ceil((n - 2) / 2);
+    const bottom = n - 2 - top;
+    const a = ((top - 1) * SEAT_GAP_X) / 2 + 150;
+    const b = 175;
+    const width = 2 * a + SEAT_W + 16;
+    const height = 2 * b + SEAT_H + 8;
+    const cx = width / 2;
+    const cy = height / 2;
+    const row = (count, k) => cx + (k - (count - 1) / 2) * SEAT_GAP_X;
+    // Clockwise from the top-left seat: top row, right end, bottom row (right to left), left end.
+    const spots = [
+      ...Array.from({ length: top }, (_, k) => ({ x: row(top, k), y: cy - b, top: true })),
+      { x: cx + a, y: cy, top: false },
+      ...Array.from({ length: bottom }, (_, k) => ({ x: row(bottom, bottom - 1 - k), y: cy + b, top: false })),
+      { x: cx - a, y: cy, top: false },
+    ];
+    const first = Math.floor((top - 1) / 2); // the first player (usually the creator) sits top centre
+    return { a, b, width, height, tableW: 2 * (a - 60), tableH: 2 * (b - 70), spot: (i) => spots[(i + first) % n] };
+  }
+  // Up to 8 people: seats spaced evenly around an oval that grows with the number of players.
   const perimeterNeeded = Math.max(n, 1) * (compact ? 108 : 120);
   const a = Math.max(compact ? 200 : 270, perimeterNeeded / 5.16);
   const b = Math.max(compact ? 170 : 180, a * 0.62);
+  const width = 2 * a + SEAT_W + 16;
+  const height = 2 * b + SEAT_H + 8;
   return {
-    a, b,
-    width: 2 * a + SEAT_W + 16,
-    height: 2 * b + SEAT_H + 8,
+    a, b, width, height,
     tableW: 2 * (a - 60),
     tableH: 2 * (b - 70),
+    spot: (i) => {
+      const angle = -Math.PI / 2 + (i * 2 * Math.PI) / Math.max(n, 1);
+      return { x: width / 2 + a * Math.cos(angle), y: height / 2 + b * Math.sin(angle), top: Math.sin(angle) < -0.2 };
+    },
   };
 }
 
 function renderSeats() {
   const r = S.room;
   const players = r.players;
+  // More than TABLE_MAX_PLAYERS people don't fit around the table, so they're shown in two lists instead.
+  const listMode = players.length > TABLE_MAX_PLAYERS;
+  if (S.listMode !== undefined && S.listMode !== listMode) hideThrowMenu(true); // seats are moving
+  S.listMode = listMode;
   const L = layoutFor(players.length);
   const scaleBox = $('#table-scale');
   const seatsEl = $('#seats');
-  scaleBox.style.width = `${L.width}px`;
-  scaleBox.style.height = `${L.height}px`;
   const table = $('#table');
-  table.style.width = `${L.tableW}px`;
-  table.style.height = `${L.tableH}px`;
-  fitTable();
+  const roster = $('#roster');
+  $('#table-outer').hidden = listMode;
+  roster.hidden = !listMode;
+  $('#stage').classList.toggle('list-mode', listMode);
+  const tableHome = listMode ? $('#roster-table') : scaleBox;
+  if (table.parentElement !== tableHome) tableHome.prepend(table);
+  if (listMode) {
+    table.style.width = '';
+    table.style.height = '';
+  } else {
+    scaleBox.style.width = `${L.width}px`;
+    scaleBox.style.height = `${L.height}px`;
+    table.style.width = `${L.tableW}px`;
+    table.style.height = `${L.tableH}px`;
+    fitTable();
+  }
+  const leftCount = Math.ceil(players.length / 2);
+  const place = (el, parent, index) => {
+    // Only move a seat when it is in the wrong spot, so its card animations don't restart.
+    if (parent.children[index] !== el) parent.insertBefore(el, parent.children[index] || null);
+  };
 
   const alive = new Set();
   players.forEach((p, i) => {
     alive.add(p.id);
-    const angle = -Math.PI / 2 + (i * 2 * Math.PI) / players.length;
-    const x = L.width / 2 + L.a * Math.cos(angle);
-    const y = L.height / 2 + L.b * Math.sin(angle);
     let el = S.seatEls.get(p.id);
     if (!el) {
       el = document.createElement('div');
@@ -870,9 +928,20 @@ function renderSeats() {
       S.seatEls.set(p.id, el);
       bindSeatHover(el);
     }
-    el.style.left = `${x}px`;
-    el.style.top = `${y}px`;
-    el.classList.toggle('top', Math.sin(angle) < -0.2);
+    el.classList.toggle('seat-row', listMode);
+    if (listMode) {
+      const left = i < leftCount;
+      place(el, left ? $('#roster-left') : $('#roster-right'), left ? i : i - leftCount);
+      el.style.left = '';
+      el.style.top = '';
+      el.classList.remove('top');
+    } else {
+      const { x, y, top } = L.spot(i);
+      if (el.parentElement !== seatsEl) seatsEl.appendChild(el);
+      el.style.left = `${x}px`;
+      el.style.top = `${y}px`;
+      el.classList.toggle('top', top);
+    }
     el.classList.toggle('offline', !p.connected);
     el.classList.toggle('is-you', p.id === r.you.id);
 
@@ -934,11 +1003,23 @@ function renderSeats() {
 function fitTable() {
   const box = $('#table-scale');
   const outer = $('#table-outer');
-  if (!box || !outer) return;
+  if (!box || !outer || outer.hidden) return;
   const w = parseFloat(box.style.width);
   const h = parseFloat(box.style.height);
-  const avail = $('#stage').clientWidth - 4;
-  const scale = Math.min(1, avail / w);
+  const stage = $('#stage');
+  const avail = stage.clientWidth - 4;
+  let scale = Math.min(1, avail / w);
+  // On desktop, also shrink the table so the whole room (cards, results, Vote again) fits without scrolling.
+  if (window.innerWidth > 860) {
+    const room = stage.parentElement;
+    const cs = getComputedStyle(room);
+    const gap = parseFloat(cs.rowGap) || 0;
+    const below = [...room.children].filter((el) => el !== stage && el.offsetHeight > 0)
+      .reduce((sum, el) => sum + el.offsetHeight + gap, 0);
+    const top = stage.getBoundingClientRect().top + window.scrollY + (parseFloat(getComputedStyle(stage).paddingTop) || 0);
+    const availH = window.innerHeight - top - below - (parseFloat(cs.paddingBottom) || 0) - 2;
+    scale = Math.max(0.5, Math.min(scale, availH / h));
+  }
   box.style.transform = `scale(${scale})`;
   outer.style.width = `${w * scale}px`;
   outer.style.height = `${h * scale}px`;
@@ -1051,8 +1132,8 @@ function renderResults() {
       </div>` : '<p class="hint">Nobody voted this round.</p>'}
       ${stats.length ? `<div class="stats">${stats.join('')}</div>` : ''}
       ${res.agreement ? '<span class="agreement">Full agreement 🎉</span>' : ''}
-    </div>
-    <button class="btn btn-primary btn-lg" data-action="reset">Vote again</button>`;
+      <button class="btn btn-primary btn-lg" data-action="reset">Vote again</button>
+    </div>`;
 }
 
 function celebrate() {
@@ -1174,7 +1255,7 @@ function openSettingsModal() {
   const r = S.room;
   const modal = openModal('settings', `
     <form id="settings-form" novalidate>
-      <div style="display:grid;gap:18px">
+      <div style="display:grid;gap:14px">
         <h2>Room settings</h2>
         ${settingsFormHtml(r.settings, { roomName: r.name })}
         <p class="hint">Changing the deck or the SKIP/coffee cards starts a new round.</p>

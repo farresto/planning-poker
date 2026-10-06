@@ -499,3 +499,15 @@ test('HTTP: Microsoft return path cannot leave the site; hidden when not configu
     assert.equal((await client(base).call('/api/config')).body.microsoftEnabled, false);
   });
 });
+
+test('rooms hold at most 24 people; the 25th gets "Room is full"', () => {
+  const { m } = managerWithLog();
+  const room = m.createRoom(alice, { name: 'Big', settings: {} });
+  m.join(room.id, alice);
+  for (let i = 1; i < 24; i++) m.join(room.id, { email: `p${i}@x.com`, name: `P${i}`, picture: null }, { spectator: i % 5 === 0 });
+  assert.equal(m.getRoom(room.id).players.size, 24);
+  assert.throws(() => m.join(room.id, { email: 'late@x.com', name: 'Late', picture: null }), /Room is full/);
+  // People already in the room can still rejoin or switch to spectator.
+  m.join(room.id, { email: 'p1@x.com', name: 'P1', picture: null }, { spectator: true });
+  assert.equal(m.getRoom(room.id).players.size, 24);
+});
