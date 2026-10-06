@@ -69,7 +69,7 @@ Any host that runs a long-lived Node process works (Railway, Fly.io, Koyeb, a VM
 | `GOOGLE_CLIENT_ID` | yes* | OAuth Web client ID used to verify Google sign-in tokens |
 | `MICROSOFT_CLIENT_ID` | yes* | Entra app registration (Application ID) for Microsoft sign-in; the button is hidden when unset |
 | `SESSION_SECRET` | recommended | Signs session cookies; if missing, a random one is used and everyone is signed out on restart |
-| `ALLOWED_DOMAIN` | no | `*` (default) allows any email domain. Or a comma-separated list, e.g. `gmail.com,globant.com` |
+| `ALLOWED_DOMAIN` | no | `*` (default) allows any email domain. Or a comma-separated list, e.g. `gmail.com,yourcompany.com` |
 | `PUBLIC_URL` | no | Site address used to build the Microsoft redirect URI, e.g. `https://planning-poker-xxxx.onrender.com`. Worked out from the request if unset |
 | `PORT` | no | Set automatically by most hosts (default 3000) |
 | `ALLOW_DEV_LOGIN` | no | `true` enables email-only sign-in for local testing. Keep unset in production |
