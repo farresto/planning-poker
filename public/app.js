@@ -434,28 +434,29 @@ function resizeImage(file) {
 }
 
 // ---------------- settings form (create + edit) ----------------
-function settingsFormHtml(s, { roomName = '', includeSpectator = false } = {}) {
+function settingsFormHtml(s, { roomName = '' } = {}) {
   const deckOptions = Object.entries(DECKS).map(([k, d]) => {
     const values = d.values ? ` (${d.values.join(', ')})` : '';
     return `<option value="${k}" ${s.deckType === k ? 'selected' : ''}>${esc(d.label + values)}</option>`;
   }).join('');
   const check = (key) => `<label class="check"><input type="checkbox" name="${key}" ${s[key] ? 'checked' : ''}><span>${esc(SETTING_LABELS[key])}</span></label>`;
   return `
-    <label class="field"><span>Room name</span>
-      <input class="input" name="roomName" maxlength="60" required placeholder="Sprint 42 planning" value="${esc(roomName)}"></label>
-    <label class="field"><span>Deck</span><select class="select" name="deckType">${deckOptions}</select></label>
+    <div class="form-row">
+      <label class="field"><span>Room name</span>
+        <input class="input" name="roomName" maxlength="60" required placeholder="Sprint 42 planning" value="${esc(roomName)}"></label>
+      <label class="field"><span>Deck</span><select class="select" name="deckType">${deckOptions}</select></label>
+    </div>
     <label class="field" data-custom ${s.deckType === 'custom' ? '' : 'hidden'}><span>Custom card values</span>
-      <textarea class="textarea" name="customValues" placeholder="1, 2, 3, 5, 8, ?">${esc(s.customValues)}</textarea>
+      <textarea class="textarea" name="customValues" rows="2" placeholder="1, 2, 3, 5, 8, ?">${esc(s.customValues)}</textarea>
       <span class="hint">Separate values with commas. Up to 20 cards, 10 characters each.</span></label>
     <div class="deck-preview" data-preview aria-label="Cards in this deck"></div>
     <p class="error-text" data-form-error hidden></p>
     <div class="options">
       ${check('skipCard')}${check('coffeeCard')}${check('autoReveal')}${check('allowEarlyReveal')}
-      <div>${check('timer')}<label class="inline-number" data-timer ${s.timer ? '' : 'hidden'}>
-        <input class="input" type="number" name="timerSeconds" min="${TIMER_MIN}" max="${TIMER_MAX}" value="${s.timerSeconds}"> <span>seconds per vote</span></label></div>
+      <div class="timer-opt">${check('timer')}<label class="inline-number" data-timer ${s.timer ? '' : 'hidden'}>
+        <input class="input" type="number" name="timerSeconds" min="${TIMER_MIN}" max="${TIMER_MAX}" value="${s.timerSeconds}" aria-label="Seconds per vote"> <span>sec</span></label></div>
       ${check('showAverage')}${check('showMedian')}${check('countdown')}${check('emojis')}${check('throwing')}
-    </div>
-    ${includeSpectator ? '<label class="check"><input type="checkbox" name="spectator"><span>Join as spectator</span></label>' : ''}`;
+    </div>`;
 }
 
 function readSettingsForm(form) {
@@ -516,9 +517,9 @@ function renderHome() {
       </section>
       <div class="home-grid">
         <form class="panel panel-create" id="create-form" novalidate>
-          <h2>Create a room</h2>
-          ${settingsFormHtml(DEFAULT_SETTINGS, { includeSpectator: true })}
-          <div class="form-foot"><span class="hint">You can change these options later from the room.</span>
+          <div class="panel-head"><h2>Create a room</h2><span class="hint">You can change these options later from the room.</span></div>
+          ${settingsFormHtml(DEFAULT_SETTINGS)}
+          <div class="form-foot"><label class="check"><input type="checkbox" name="spectator"><span>Join as spectator</span></label>
             <button class="btn btn-primary btn-lg" type="submit">Create room</button></div>
         </form>
         <form class="panel panel-join" id="join-form" novalidate>
@@ -773,6 +774,7 @@ function onState(view) {
   renderTableStatus();
   renderHand();
   renderResults();
+  fitTable(); // hand and results are rendered now, so the height left for the table is known
   $('#reactions').hidden = !view.settings.emojis;
   if (!view.settings.throwing) hideThrowMenu(true);
   if ($('.modal-backdrop[data-modal="kick"]')) refreshKickModal();
@@ -937,8 +939,20 @@ function fitTable() {
   if (!box || !outer) return;
   const w = parseFloat(box.style.width);
   const h = parseFloat(box.style.height);
-  const avail = $('#stage').clientWidth - 4;
-  const scale = Math.min(1, avail / w);
+  const stage = $('#stage');
+  const avail = stage.clientWidth - 4;
+  let scale = Math.min(1, avail / w);
+  // On desktop, also shrink the table so the whole room (cards, results, Vote again) fits without scrolling.
+  if (window.innerWidth > 860) {
+    const room = stage.parentElement;
+    const cs = getComputedStyle(room);
+    const gap = parseFloat(cs.rowGap) || 0;
+    const below = [...room.children].filter((el) => el !== stage && el.offsetHeight > 0)
+      .reduce((sum, el) => sum + el.offsetHeight + gap, 0);
+    const top = stage.getBoundingClientRect().top + window.scrollY + (parseFloat(getComputedStyle(stage).paddingTop) || 0);
+    const availH = window.innerHeight - top - below - (parseFloat(cs.paddingBottom) || 0) - 2;
+    scale = Math.max(0.5, Math.min(scale, availH / h));
+  }
   box.style.transform = `scale(${scale})`;
   outer.style.width = `${w * scale}px`;
   outer.style.height = `${h * scale}px`;
@@ -1051,8 +1065,8 @@ function renderResults() {
       </div>` : '<p class="hint">Nobody voted this round.</p>'}
       ${stats.length ? `<div class="stats">${stats.join('')}</div>` : ''}
       ${res.agreement ? '<span class="agreement">Full agreement 🎉</span>' : ''}
-    </div>
-    <button class="btn btn-primary btn-lg" data-action="reset">Vote again</button>`;
+      <button class="btn btn-primary btn-lg" data-action="reset">Vote again</button>
+    </div>`;
 }
 
 function celebrate() {
@@ -1174,7 +1188,7 @@ function openSettingsModal() {
   const r = S.room;
   const modal = openModal('settings', `
     <form id="settings-form" novalidate>
-      <div style="display:grid;gap:18px">
+      <div style="display:grid;gap:14px">
         <h2>Room settings</h2>
         ${settingsFormHtml(r.settings, { roomName: r.name })}
         <p class="hint">Changing the deck or the SKIP/coffee cards starts a new round.</p>
