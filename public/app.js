@@ -171,6 +171,13 @@ async function boot() {
     app.innerHTML = '<div class="boot">The server is not reachable. Refresh the page to try again.</div>';
     return;
   }
+  // A failed Microsoft sign-in comes back as /?login_error=...; show it once, then tidy the URL.
+  const params = new URLSearchParams(location.search);
+  const loginError = params.get('login_error');
+  if (loginError) {
+    params.delete('login_error');
+    history.replaceState({}, '', location.pathname + (params.size ? `?${params}` : '') + location.hash);
+  }
   try {
     const me = await api('/api/me');
     S.user = me.user;
@@ -178,6 +185,7 @@ async function boot() {
   } catch {
     S.user = null;
   }
+  if (!S.user && loginError) return renderLogin(loginError.slice(0, 300));
   route();
 }
 
@@ -204,21 +212,29 @@ function loadGsi() {
 
 function renderLogin(error = null) {
   document.title = 'Sign in · Planning Poker';
-  const { googleClientId, devLogin } = S.config;
+  const { googleClientId, microsoftEnabled, devLogin } = S.config;
   const domains = S.config.allowedDomains || String(S.config.allowedDomain || '').split(',').map((d) => d.trim()).filter(Boolean);
   const domainText = domains.length > 1 ? `${domains.slice(0, -1).join(', ')} or ${domains[domains.length - 1]}` : domains[0] || '';
+  const providers = [googleClientId && 'Google', microsoftEnabled && 'Microsoft'].filter(Boolean).join(' or ') || 'Google';
+  const msHref = `/api/auth/microsoft/start?return=${encodeURIComponent(location.pathname)}`;
   app.innerHTML = `
     <main class="login">
       <div class="login-card">
         <div class="fan" aria-hidden="true"><span>3</span><span>5</span><span class="back"></span></div>
         <h1>Planning Poker</h1>
-        <p>Estimate stories together with your team. Sign in with your ${esc(domainText)} Google account.</p>
+        <p>Estimate stories together with your team. Sign in with your ${domainText ? `${esc(domainText)} ` : ''}${providers} account.</p>
         <div class="login-alert" id="login-error" role="alert" ${error ? '' : 'hidden'}>${esc(error || '')}</div>
-        <div class="gsi-slot" id="gsi-button">${googleClientId ? '' : '<p class="error-text">Google sign-in is not configured on this server yet.</p>'}</div>
+        <div class="login-buttons">
+          ${googleClientId ? '<div class="gsi-slot" id="gsi-button"></div>' : ''}
+          ${microsoftEnabled ? `<a class="ms-btn" href="${esc(msHref)}">
+            <svg viewBox="0 0 21 21" width="20" height="20" aria-hidden="true"><rect x="1" y="1" width="9" height="9" fill="#f25022"/><rect x="11" y="1" width="9" height="9" fill="#7fba00"/><rect x="1" y="11" width="9" height="9" fill="#00a4ef"/><rect x="11" y="11" width="9" height="9" fill="#ffb900"/></svg>
+            <span>Sign in with Microsoft</span></a>` : ''}
+          ${!googleClientId && !microsoftEnabled ? '<p class="error-text">Sign-in is not configured on this server yet.</p>' : ''}
+        </div>
         ${devLogin ? `
           <form class="dev-login" id="dev-login">
-            <p class="hint">Local testing only: sign in with any ${esc(domainText)} email.</p>
-            <input class="input" name="email" type="email" placeholder="name@${esc(domains[0] || '')}" required>
+            <p class="hint">Local testing only: sign in with any ${domainText ? `${esc(domainText)} ` : ''}email.</p>
+            <input class="input" name="email" type="email" placeholder="name@${esc(domains[0] || 'example.com')}" required>
             <input class="input" name="name" placeholder="Display name">
             <button class="btn" type="submit">Sign in for testing</button>
           </form>` : ''}
@@ -329,7 +345,7 @@ function openProfileMenu() {
         <input class="input" id="profile-name" maxlength="32" value="${esc(draft.name)}"></label>
       <div class="field"><span>Profile picture</span>
         <div class="avatar-grid" role="radiogroup" aria-label="Profile picture">
-          <button type="button" class="avatar-choice" role="radio" aria-checked="${choice('google')}" data-kind="google" title="Google photo">
+          <button type="button" class="avatar-choice" role="radio" aria-checked="${choice('google')}" data-kind="google" title="${S.user.picture ? 'Account photo' : 'Your initials'}">
             ${avatarHtml(S.user.picture ? { kind: 'url', url: S.user.picture } : { kind: 'initials' }, S.user.name)}</button>
           ${PRESET_AVATARS.map((a) => `<button type="button" class="avatar-choice" role="radio" aria-checked="${choice('preset', a.id)}" data-kind="preset" data-id="${a.id}" title="${a.name}">${avatarHtml({ kind: 'preset', id: a.id })}</button>`).join('')}
           ${draft.avatar.kind === 'upload' && draft.avatar.dataUrl

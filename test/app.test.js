@@ -2,7 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import { RoomManager, computeResults, sanitizeSettings } from '../server/rooms.js';
-import { verifyGoogleIdToken, resetKeyCache, createSessionCodec, isAllowedEmail } from '../server/auth.js';
+import {
+  verifyGoogleIdToken, verifyMicrosoftIdToken, microsoftVerifiedEmail, MICROSOFT_CONSUMER_TENANT, resetKeyCache, createSessionCodec, isAllowedEmail,
+} from '../server/auth.js';
 import { createApp } from '../server/index.js';
 import { DEFAULT_SETTINGS, buildDeck, cardNumber } from '../shared/constants.js';
 
@@ -198,7 +200,51 @@ test('session codec and domain check', () => {
   assert.equal(isAllowedEmail('x@GMAIL.com', ['gmail.com', 'globant.com']), true);
   assert.equal(isAllowedEmail('x@hotmail.com', 'gmail.com,globant.com'), false);
   assert.equal(isAllowedEmail('x@evilgmail.com', 'gmail.com,globant.com'), false);
-  assert.equal(isAllowedEmail('x@gmail.com', ''), false);
+  // "*" or an empty setting allows every domain (still needs a real address)
+  assert.equal(isAllowedEmail('x@anything.org', '*'), true);
+  assert.equal(isAllowedEmail('x@gmail.com', ''), true);
+  assert.equal(isAllowedEmail('x@hotmail.com', 'gmail.com, *'), true);
+  assert.equal(isAllowedEmail('not-an-email', '*'), false);
+});
+
+test('Microsoft ID token verification', async () => {
+  const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
+  const jwk = { ...publicKey.export({ format: 'jwk' }), kid: 'm1', use: 'sig', x5c: ['ignored'], issuer: 'https://login.microsoftonline.com/{tenantid}/v2.0' };
+  const fetchKeys = async () => ({ keys: [jwk], expires: Date.now() + 60_000 });
+  const sign = (payload) => {
+    const h = Buffer.from(JSON.stringify({ alg: 'RS256', kid: 'm1', typ: 'JWT' })).toString('base64url');
+    const p = Buffer.from(JSON.stringify(payload)).toString('base64url');
+    return `${h}.${p}.${crypto.sign('RSA-SHA256', Buffer.from(`${h}.${p}`), privateKey).toString('base64url')}`;
+  };
+  const tid = '72f988bf-86f1-41af-91ab-2d7cd011db47';
+  const base = {
+    iss: `https://login.microsoftonline.com/${tid}/v2.0`, tid, aud: 'ms-app', nonce: 'n1',
+    exp: Math.floor(Date.now() / 1000) + 600, nbf: Math.floor(Date.now() / 1000) - 5,
+    name: 'Ann', preferred_username: 'Ann@Contoso.com', email: 'ann@contoso.com',
+  };
+  const opts = { clientId: 'ms-app', nonce: 'n1', fetchKeys };
+  resetKeyCache();
+  assert.equal((await verifyMicrosoftIdToken(sign(base), opts)).verifiedEmail, 'ann@contoso.com');
+  await assert.rejects(verifyMicrosoftIdToken(sign({ ...base, aud: 'other' }), opts), /different app/);
+  await assert.rejects(verifyMicrosoftIdToken(sign({ ...base, nonce: 'n2' }), opts), /could not be confirmed/);
+  await assert.rejects(verifyMicrosoftIdToken(sign(base), { ...opts, nonce: undefined }), /could not be confirmed/);
+  await assert.rejects(verifyMicrosoftIdToken(sign({ ...base, exp: 1 }), opts), /expired/);
+  await assert.rejects(verifyMicrosoftIdToken(sign({ ...base, iss: 'https://login.microsoftonline.com/other/v2.0' }), opts), /issuer/);
+  await assert.rejects(verifyMicrosoftIdToken(sign({ ...base, preferred_username: 'bad#EXT#name', email: undefined }), opts), /verified email/);
+  const tampered = sign(base).split('.');
+  tampered[1] = Buffer.from(JSON.stringify({ ...base, preferred_username: 'boss@contoso.com' })).toString('base64url');
+  await assert.rejects(verifyMicrosoftIdToken(tampered.join('.'), opts), /signature/);
+});
+
+test('Microsoft: which email address is trusted', () => {
+  const work = { tid: '72f988bf-86f1-41af-91ab-2d7cd011db47' };
+  // Work account: an admin-typed "email" is ignored unless the domain owner verified it; the UPN is used instead.
+  assert.equal(microsoftVerifiedEmail({ ...work, email: 'victim@gmail.com', preferred_username: 'eve@evil.com' }), 'eve@evil.com');
+  assert.equal(microsoftVerifiedEmail({ ...work, email: 'Ann@Contoso.com', xms_edov: true, preferred_username: 'a1@contoso.com' }), 'ann@contoso.com');
+  assert.equal(microsoftVerifiedEmail({ ...work, email: 'victim@gmail.com' }), null);
+  // Personal account: the sign-in address is verified by Microsoft.
+  assert.equal(microsoftVerifiedEmail({ tid: MICROSOFT_CONSUMER_TENANT, email: 'jp@hotmail.com' }), 'jp@hotmail.com');
+  assert.equal(microsoftVerifiedEmail({ tid: MICROSOFT_CONSUMER_TENANT, preferred_username: 'jp@outlook.com' }), 'jp@outlook.com');
 });
 
 // ---------- HTTP end-to-end ----------
@@ -207,6 +253,7 @@ async function withServer(fn, opts = {}) {
     allowDevLogin: true,
     sessionSecret: 's',
     googleClientId: 'cid',
+    allowedDomain: 'globant.com',
     verifyToken: async (credential) => ({ email: credential, name: 'G', email_verified: true }),
     ...opts,
   });
@@ -361,5 +408,94 @@ test('HTTP: static files and SPA routes', async () => {
     }
     assert.equal((await fetch(base + '/../server/auth.js')).status, 404);
     assert.equal((await fetch(base + '/%2e%2e/server/auth.js')).status, 404);
+  });
+});
+
+test('HTTP: any domain is allowed when ALLOWED_DOMAIN is "*"', async () => {
+  await withServer(async (base) => {
+    const c = client(base);
+    assert.equal((await c.call('/api/auth/google', { credential: 'someone@example.org' })).status, 200);
+    assert.equal((await c.call('/api/me')).body.user.provider, 'google');
+    const cfg = await c.call('/api/config');
+    assert.equal(cfg.body.anyDomain, true);
+    assert.deepEqual(cfg.body.allowedDomains, []);
+  }, { allowedDomain: '*' });
+});
+
+test('HTTP: Microsoft sign-in round trip', async () => {
+  let seen = null;
+  await withServer(async (base) => {
+    // start: redirects to Microsoft with a nonce and state, and remembers them in a short-lived cookie
+    let res = await fetch(`${base}/api/auth/microsoft/start?return=${encodeURIComponent('/room/abc123')}`, { redirect: 'manual' });
+    assert.equal(res.status, 302);
+    const to = new URL(res.headers.get('location'));
+    assert.equal(to.origin + to.pathname, 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize');
+    assert.equal(to.searchParams.get('client_id'), 'ms-app');
+    assert.equal(to.searchParams.get('response_mode'), 'form_post');
+    assert.equal(to.searchParams.get('redirect_uri'), 'https://poker.example.com/api/auth/microsoft/callback');
+    const loginCookie = res.headers.get('set-cookie');
+    assert.match(loginCookie, /SameSite=None; Secure/);
+    const cookie = loginCookie.split(';')[0];
+    const state = to.searchParams.get('state');
+    const nonce = to.searchParams.get('nonce');
+
+    const callback = (fields, cookieHeader = cookie) => fetch(`${base}/api/auth/microsoft/callback`, {
+      method: 'POST', redirect: 'manual',
+      headers: { 'content-type': 'application/x-www-form-urlencoded', cookie: cookieHeader },
+      body: new URLSearchParams(fields).toString(),
+    });
+
+    // wrong state -> back to the sign-in page with a message, no session
+    res = await callback({ id_token: 'tok', state: 'nope' });
+    assert.equal(res.status, 303);
+    assert.match(res.headers.get('location'), /^\/\?login_error=/);
+
+    // cancelled on the Microsoft page -> quietly back home
+    res = await callback({ error: 'access_denied', state });
+    assert.equal(res.headers.get('location'), '/');
+
+    // success -> session cookie, back to the room the person came from
+    res = await callback({ id_token: 'tok', state });
+    assert.equal(res.status, 303);
+    assert.equal(res.headers.get('location'), '/room/abc123');
+    assert.equal(seen.nonce, nonce);
+    const session = res.headers.getSetCookie().find((c) => c.startsWith('pp_session='));
+    assert.ok(session);
+    const me = await fetch(`${base}/api/me`, { headers: { cookie: session.split(';')[0] } }).then((r) => r.json());
+    assert.deepEqual([me.user.email, me.user.provider], ['ann@contoso.com', 'microsoft']);
+
+    // no login cookie (e.g. expired or another browser) -> refused
+    res = await callback({ id_token: 'tok', state }, '');
+    assert.match(res.headers.get('location'), /login_error/);
+  }, {
+    allowedDomain: '*',
+    microsoftClientId: 'ms-app',
+    publicUrl: 'https://poker.example.com/',
+    verifyMicrosoftToken: async (token, opts) => {
+      seen = opts;
+      return { verifiedEmail: 'ann@contoso.com', name: 'Ann' };
+    },
+  });
+});
+
+test('HTTP: Microsoft return path cannot leave the site; hidden when not configured', async () => {
+  await withServer(async (base) => {
+    for (const ret of ['//evil.com', 'https://evil.com', '/\\evil.com']) {
+      const res = await fetch(`${base}/api/auth/microsoft/start?return=${encodeURIComponent(ret)}`, { redirect: 'manual' });
+      const cookie = res.headers.get('set-cookie').split(';')[0];
+      const state = new URL(res.headers.get('location')).searchParams.get('state');
+      const cb = await fetch(`${base}/api/auth/microsoft/callback`, {
+        method: 'POST', redirect: 'manual',
+        headers: { 'content-type': 'application/x-www-form-urlencoded', cookie },
+        body: new URLSearchParams({ id_token: 't', state }).toString(),
+      });
+      assert.equal(cb.headers.get('location'), '/');
+    }
+  }, { allowedDomain: '*', microsoftClientId: 'ms-app', verifyMicrosoftToken: async () => ({ verifiedEmail: 'a@b.com' }) });
+
+  await withServer(async (base) => {
+    const res = await fetch(`${base}/api/auth/microsoft/start`, { redirect: 'manual' });
+    assert.equal(res.status, 404);
+    assert.equal((await client(base).call('/api/config')).body.microsoftEnabled, false);
   });
 });

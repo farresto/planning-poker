@@ -10,8 +10,10 @@ services:
       - key: NODE_VERSION
         value: "22"
       - key: ALLOWED_DOMAIN
-        value: "gmail.com,globant.com"
+        value: "*"
       - key: SESSION_SECRET
         generateValue: true
       - key: GOOGLE_CLIENT_ID
         sync: false
+      - key: MICROSOFT_CLIENT_ID
+        value: "15f1dd5b-6a1c-4882-8d66-908f180c7ae6"

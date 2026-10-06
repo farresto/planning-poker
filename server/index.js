@@ -5,7 +5,8 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { RoomManager, ActionError } from './rooms.js';
 import {
-  AuthError, DOMAIN_ERROR, createSessionCodec, isAllowedEmail, parseCookies, parseDomains, verifyGoogleIdToken,
+  AuthError, DOMAIN_ERROR, MICROSOFT_AUTHORIZE_URL, allowsAnyDomain, createSessionCodec, isAllowedEmail, parseCookies,
+  parseDomains, verifyGoogleIdToken, verifyMicrosoftIdToken,
 } from './auth.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -15,6 +16,8 @@ const MIME = {
   '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.json': 'application/json',
 };
 const COOKIE = 'pp_session';
+const MS_COOKIE = 'pp_ms_login';
+const MS_CALLBACK = '/api/auth/microsoft/callback';
 const MAX_BODY = 400 * 1024;
 const MAX_AVATAR_BYTES = 150 * 1024;
 
@@ -40,13 +43,18 @@ class HttpError extends Error {
 export function createApp(options = {}) {
   const config = {
     googleClientId: options.googleClientId ?? process.env.GOOGLE_CLIENT_ID ?? '',
-    allowedDomains: parseDomains(options.allowedDomain ?? process.env.ALLOWED_DOMAIN ?? 'globant.com'),
+    microsoftClientId: options.microsoftClientId ?? process.env.MICROSOFT_CLIENT_ID ?? '',
+    publicUrl: (options.publicUrl ?? process.env.PUBLIC_URL ?? '').replace(/\/+$/, ''),
+    allowedDomains: parseDomains(options.allowedDomain ?? process.env.ALLOWED_DOMAIN ?? '*'),
     allowDevLogin: options.allowDevLogin ?? process.env.ALLOW_DEV_LOGIN === 'true',
     sessionSecret: options.sessionSecret ?? process.env.SESSION_SECRET ?? crypto.randomBytes(32).toString('hex'),
     verifyToken: options.verifyToken ?? verifyGoogleIdToken,
+    verifyMicrosoftToken: options.verifyMicrosoftToken ?? verifyMicrosoftIdToken,
     graceMs: options.graceMs,
   };
   const sessions = createSessionCodec(config.sessionSecret);
+  // Short-lived, signed record of one Microsoft sign-in attempt (nonce, state, where to return).
+  const msLogins = createSessionCodec(`${config.sessionSecret}:microsoft-login`, 10 * 60_000);
   const conns = new Map(); // roomId -> Map<email, res>
   const pendingState = new Set();
 
@@ -128,10 +136,58 @@ export function createApp(options = {}) {
     return user;
   }
 
-  function setSession(req, res, user) {
-    const secure = req.headers['x-forwarded-proto'] === 'https' || req.socket.encrypted ? '; Secure' : '';
+  function sessionCookie(req, user) {
+    const secure = isHttps(req) ? '; Secure' : '';
     const maxAge = Math.floor(sessions.ttlMs / 1000);
-    res.setHeader('Set-Cookie', `${COOKIE}=${sessions.encode(user)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure}`);
+    return `${COOKIE}=${sessions.encode(user)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure}`;
+  }
+
+  function setSession(req, res, user) {
+    res.setHeader('Set-Cookie', sessionCookie(req, user));
+  }
+
+  function isHttps(req) {
+    return String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim() === 'https' || Boolean(req.socket.encrypted);
+  }
+
+  function microsoftRedirectUri(req) {
+    const origin = config.publicUrl || `${isHttps(req) ? 'https' : 'http'}://${req.headers.host}`;
+    return origin + MS_CALLBACK;
+  }
+
+  // Only same-site paths, so the sign-in can't be used to bounce people to another website.
+  function safeReturnPath(value) {
+    const v = String(value || '/');
+    return /^\/(?!\/)[A-Za-z0-9/_-]*$/.test(v) ? v : '/';
+  }
+
+  function redirect(res, location, status = 303) {
+    res.writeHead(status, { Location: location, 'Cache-Control': 'no-store' });
+    res.end();
+  }
+
+  function loginErrorRedirect(res, message) {
+    redirect(res, `/?login_error=${encodeURIComponent(message)}`);
+  }
+
+  // The callback is a cross-site POST from login.microsoftonline.com, which only carries
+  // SameSite=None cookies, and those must be Secure (browsers accept that on http://localhost too).
+  function msCookie(value, maxAge) {
+    return `${MS_COOKIE}=${value}; Path=/api/auth/microsoft; HttpOnly; SameSite=None; Secure; Max-Age=${maxAge}`;
+  }
+
+  async function readForm(req) {
+    if (!String(req.headers['content-type'] || '').startsWith('application/x-www-form-urlencoded')) {
+      throw new HttpError(415, 'Expected a form post.');
+    }
+    const chunks = [];
+    let size = 0;
+    for await (const chunk of req) {
+      size += chunk.length;
+      if (size > 64 * 1024) throw new HttpError(413, 'Request is too large.');
+      chunks.push(chunk);
+    }
+    return new URLSearchParams(Buffer.concat(chunks).toString('utf8'));
   }
 
   function parseProfile(profile) {
@@ -216,8 +272,10 @@ export function createApp(options = {}) {
     if (pathname === '/api/config' && method === 'GET') {
       return json(res, 200, {
         googleClientId: config.googleClientId,
-        allowedDomain: config.allowedDomains.join(', '),
-        allowedDomains: config.allowedDomains,
+        microsoftEnabled: Boolean(config.microsoftClientId),
+        anyDomain: allowsAnyDomain(config.allowedDomains),
+        allowedDomain: allowsAnyDomain(config.allowedDomains) ? '' : config.allowedDomains.join(', '),
+        allowedDomains: allowsAnyDomain(config.allowedDomains) ? [] : config.allowedDomains,
         devLogin: config.allowDevLogin,
       });
     }
@@ -227,9 +285,61 @@ export function createApp(options = {}) {
       const { credential } = await readJson(req);
       const payload = await config.verifyToken(credential, { clientId: config.googleClientId });
       if (!isAllowedEmail(payload.email, config.allowedDomains)) throw new HttpError(403, DOMAIN_ERROR);
-      const user = { email: payload.email.toLowerCase(), name: payload.name || payload.email.split('@')[0], picture: payload.picture || null };
+      const user = {
+        email: payload.email.toLowerCase(), name: payload.name || payload.email.split('@')[0], picture: payload.picture || null, provider: 'google',
+      };
       setSession(req, res, user);
       return json(res, 200, { user });
+    }
+
+    if (pathname === '/api/auth/microsoft/start' && method === 'GET') {
+      if (!config.microsoftClientId) throw new HttpError(404, 'Microsoft sign-in is not configured on the server.');
+      const query = new URL(req.url, 'http://localhost').searchParams;
+      const attempt = {
+        nonce: crypto.randomBytes(16).toString('base64url'),
+        state: crypto.randomBytes(16).toString('base64url'),
+        ret: safeReturnPath(query.get('return')),
+      };
+      res.setHeader('Set-Cookie', msCookie(msLogins.encode(attempt), 600));
+      const params = new URLSearchParams({
+        client_id: config.microsoftClientId,
+        response_type: 'id_token',
+        response_mode: 'form_post',
+        redirect_uri: microsoftRedirectUri(req),
+        scope: 'openid profile email',
+        nonce: attempt.nonce,
+        state: attempt.state,
+        prompt: 'select_account',
+      });
+      return redirect(res, `${MICROSOFT_AUTHORIZE_URL}?${params}`, 302);
+    }
+
+    if (pathname === MS_CALLBACK && method === 'POST') {
+      const attempt = msLogins.decode(parseCookies(req.headers.cookie)[MS_COOKIE]);
+      res.setHeader('Set-Cookie', msCookie('', 0));
+      const form = await readForm(req);
+      if (!config.microsoftClientId) return loginErrorRedirect(res, 'Microsoft sign-in is not configured on the server.');
+      if (form.get('error')) {
+        // The person closed or cancelled the Microsoft page: just go back quietly.
+        if (form.get('error') === 'access_denied') return redirect(res, '/');
+        console.warn('Microsoft sign-in error:', form.get('error'), form.get('error_description'));
+        return loginErrorRedirect(res, 'Microsoft sign-in did not complete. Try again, or ask your IT team whether this app is allowed.');
+      }
+      if (!attempt || !form.get('state') || attempt.state !== form.get('state')) {
+        return loginErrorRedirect(res, 'Microsoft sign-in took too long or was started in another tab. Try again.');
+      }
+      try {
+        const payload = await config.verifyMicrosoftToken(form.get('id_token'), { clientId: config.microsoftClientId, nonce: attempt.nonce });
+        const email = payload.verifiedEmail;
+        if (!isAllowedEmail(email, config.allowedDomains)) return loginErrorRedirect(res, DOMAIN_ERROR);
+        const name = String(payload.name || '').trim() || email.split('@')[0];
+        // Replace the cleared login cookie with both headers: the session and the cleared attempt.
+        res.setHeader('Set-Cookie', [msCookie('', 0), sessionCookie(req, { email, name, picture: null, provider: 'microsoft' })]);
+        return redirect(res, attempt.ret);
+      } catch (err) {
+        if (!(err instanceof AuthError)) console.error(err);
+        return loginErrorRedirect(res, err instanceof AuthError ? err.message : 'Microsoft sign-in failed. Try again.');
+      }
     }
 
     if (pathname === '/api/auth/dev' && method === 'POST') {
@@ -238,7 +348,7 @@ export function createApp(options = {}) {
       const email = String(body.email || '').trim().toLowerCase();
       if (!/^[^@\s]+@[^@\s]+$/.test(email)) throw new HttpError(400, 'Enter an email address.');
       if (!isAllowedEmail(email, config.allowedDomains)) throw new HttpError(403, DOMAIN_ERROR);
-      const user = { email, name: String(body.name || email.split('@')[0]).slice(0, 32), picture: null };
+      const user = { email, name: String(body.name || email.split('@')[0]).slice(0, 32), picture: null, provider: 'dev' };
       setSession(req, res, user);
       return json(res, 200, { user });
     }
@@ -344,6 +454,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
   const port = Number(process.env.PORT || 3000);
   const { server, config } = createApp();
   if (!config.googleClientId) console.warn('⚠ GOOGLE_CLIENT_ID is not set: Google sign-in will not work.');
+  if (!config.microsoftClientId) console.warn('⚠ MICROSOFT_CLIENT_ID is not set: Microsoft sign-in is hidden.');
   if (config.allowDevLogin) console.warn('⚠ ALLOW_DEV_LOGIN=true: email-only sign-in is enabled. Never use this in production.');
   if (!process.env.SESSION_SECRET) console.warn('⚠ SESSION_SECRET is not set: sessions reset on every restart.');
   server.listen(port, () => console.log(`Planning Poker listening on http://localhost:${port}`));

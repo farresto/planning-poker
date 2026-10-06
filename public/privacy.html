@@ -23,18 +23,18 @@
   <main class="policy">
     <a class="back" href="/">← Back to Planning Poker</a>
     <h1>Privacy Policy</h1>
-    <p class="updated">Last updated: 30 September 2026</p>
+    <p class="updated">Last updated: 6 October 2026</p>
 
     <p>Planning Poker is a small internal tool that lets a team estimate story points together during sprint planning. It is designed to keep as little data as possible, for as short a time as possible.</p>
 
     <h2>What we receive when you sign in</h2>
-    <p>You sign in with Google. Google sends the app a signed token containing your <strong>name, email address and profile picture URL</strong>. The app checks the token and that your email belongs to the allowed domain, then uses these details only to show who is in a room.</p>
-    <p>The app asks Google only for basic profile information (<code>openid</code>, <code>email</code>, <code>profile</code>). It never sees your Google password and has no access to your Gmail, Drive, contacts or any other Google data.</p>
+    <p>You sign in with Google or Microsoft. The provider sends the app a signed token containing your <strong>name and email address</strong> (Google also includes your profile picture URL). The app checks the token, then uses these details only to show who is in a room.</p>
+    <p>The app asks only for basic profile information (<code>openid</code>, <code>email</code>, <code>profile</code>). It never sees your password and has no access to your email, files, contacts or any other data in your Google or Microsoft account.</p>
 
     <h2>What is stored, and where</h2>
     <ul>
       <li><strong>No database.</strong> Nothing about you is written to disk on the server.</li>
-      <li><strong>Session cookie:</strong> after sign-in your browser keeps a signed, HTTP-only cookie with your name, email and picture URL so you stay signed in. It expires after 12 hours, or when you sign out.</li>
+      <li><strong>Session cookie:</strong> after sign-in your browser keeps a signed, HTTP-only cookie with your name, email and (for Google) picture URL so you stay signed in. Signing in with Microsoft also sets a temporary cookie for up to 10 minutes to protect the sign-in itself. It expires after 12 hours, or when you sign out.</li>
       <li><strong>Rooms and votes</strong> live only in the server's memory while the room is open. They disappear when everyone leaves the room or the server restarts.</li>
       <li><strong>Profile choices</strong> (display name and picture choice) are saved in your own browser's local storage, not on the server. A picture you upload is shrunk in your browser and kept in server memory only while you are in a room.</li>
     </ul>
@@ -44,13 +44,14 @@
 
     <h2>Third-party services</h2>
     <ul>
-      <li><strong>Google Identity Services</strong> handles sign-in (<a href="https://policies.google.com/privacy" rel="noopener">Google Privacy Policy</a>).</li>
+      <li><strong>Google Identity Services</strong> handles Google sign-in (<a href="https://policies.google.com/privacy" rel="noopener">Google Privacy Policy</a>).</li>
+      <li><strong>Microsoft identity platform</strong> handles Microsoft sign-in (<a href="https://privacy.microsoft.com/privacystatement" rel="noopener">Microsoft Privacy Statement</a>).</li>
       <li><strong>Google Fonts</strong> serves the fonts used on the page.</li>
       <li><strong>Render</strong> hosts the app and may keep standard server logs such as IP addresses and request times (<a href="https://render.com/privacy" rel="noopener">Render Privacy Policy</a>).</li>
     </ul>
 
     <h2>Your choices</h2>
-    <p>You can sign out at any time, which removes the session cookie. Clearing your browser's site data removes your saved profile choices. You can also revoke the app's access from your <a href="https://myaccount.google.com/connections" rel="noopener">Google Account connections</a>.</p>
+    <p>You can sign out at any time, which removes the session cookie. Clearing your browser's site data removes your saved profile choices. You can also revoke the app's access from your <a href="https://myaccount.google.com/connections" rel="noopener">Google Account connections</a> or, for a Microsoft account, from <a href="https://account.live.com/consent/Manage" rel="noopener">personal account app permissions</a> or <a href="https://myapps.microsoft.com" rel="noopener">My Apps</a> for work or school accounts.</p>
 
     <h2>Contact</h2>
     <p>Questions about this policy: <a href="mailto:farresto@gmail.com">farresto@gmail.com</a>.</p>

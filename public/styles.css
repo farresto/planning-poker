@@ -148,7 +148,11 @@ img { max-width: 100%; }
 .fan span:nth-child(2) { transform: rotate(-4deg); background: var(--lime); color: var(--lime-ink); }
 .fan span:nth-child(3) { transform: rotate(8deg) translateY(4px); }
 .fan span.back { background: var(--indigo); background-image: repeating-linear-gradient(45deg, transparent 0 6px, rgba(255, 255, 255, .16) 6px 8px), repeating-linear-gradient(-45deg, transparent 0 6px, rgba(255, 255, 255, .16) 6px 8px); }
+.login-buttons { display: grid; gap: 12px; justify-items: center; width: 100%; }
 .gsi-slot { min-height: 44px; display: grid; place-items: center; }
+.ms-btn { width: 260px; height: 40px; display: inline-flex; align-items: center; justify-content: center; gap: 10px; border-radius: 999px; border: 1px solid #dadce0; background: #fff; color: #3c4043; font: 500 14px/1 var(--body); text-decoration: none; transition: background-color .15s, border-color .15s; }
+.ms-btn:hover { background: #f7f8f8; border-color: #d2e3fc; }
+.ms-btn:focus-visible { outline: 3px solid var(--indigo); outline-offset: 2px; }
 .login-alert { background: color-mix(in srgb, var(--coral) 12%, var(--surface)); color: var(--coral); border-radius: var(--radius-s); padding: 10px 14px; font-weight: 600; width: 100%; }
 .dev-login { width: 100%; display: grid; gap: 8px; padding-top: 16px; border-top: 1px dashed var(--line); text-align: left; }
 
